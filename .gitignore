@@ -1,0 +1,11 @@
+# backups e fontes originais dos vídeos
+_orig-files/
+
+# tooling interno (skills)
+.agents/
+.claude/
+
+# sistema
+Thumbs.db
+.DS_Store
+desktop.ini
