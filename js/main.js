@@ -28,7 +28,6 @@
     if (!video) return;
 
     var section = video.closest(".scene");
-    var bar = section ? section.querySelector(".scene-progress > span") : null;
     var contentEl = opts.contentEl ? document.getElementById(opts.contentEl) : null;
     var lastTime = -1;
 
@@ -59,7 +58,6 @@
         "loadedmetadata",
         function () {
           seek(Math.max(0, (video.duration || opts.fallbackDuration || 10) - 0.12));
-          if (bar) bar.style.transform = "scaleX(1)";
         },
         { once: true }
       );
@@ -83,7 +81,6 @@
         var d = video.duration || opts.fallbackDuration || 10;
         var target = self.progress * Math.max(0, d - 0.15);
         seek(target);
-        if (bar) bar.style.transform = "scaleX(" + self.progress + ")";
         if (contentEl) {
           /* the headline yields to the video as the story plays */
           contentEl.style.opacity = Math.max(0, 1 - self.progress * 5);

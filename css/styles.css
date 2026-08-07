@@ -277,22 +277,7 @@ a {
 }
 
 .scene-progress {
-  position: absolute;
-  left: 5vw;
-  right: 5vw;
-  bottom: 2.4rem;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.14);
-  overflow: hidden;
-}
-
-.scene-progress span {
-  display: block;
-  height: 100%;
-  width: 100%;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left center;
+  display: none;
 }
 
 /* ---------- band scene (video card + copy, pinned) ---------- */
@@ -326,14 +311,6 @@ a {
 
 .scene-band .scene-shade {
   display: none;
-}
-
-.scene-band .scene-progress {
-  left: 50%;
-  right: auto;
-  bottom: -2.5rem;
-  width: 60%;
-  transform: translateX(-50%);
 }
 
 /* ---------- chapters ---------- */
@@ -648,9 +625,6 @@ html:not(.js) [data-reveal] {
     opacity: 1;
     transform: none;
   }
-  .scene-progress {
-    display: none;
-  }
 }
 
 /* ---------- fallback horizontal scroll for the pan when JS animation is off ---------- */
@@ -736,11 +710,6 @@ html:not(.js) [data-reveal] {
   }
   .scene-content {
     padding: 0 1.25rem 5.5rem;
-  }
-  .scene-progress {
-    left: 1.25rem;
-    right: 1.25rem;
-    bottom: 1.6rem;
   }
   .specs {
     grid-template-columns: 1fr;
