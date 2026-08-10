@@ -27,8 +27,9 @@
      Performance notes for CDN hosting (Vercel):
      - Every currentTime seek beyond the buffered range is an HTTP
        round-trip. Seeks are coalesced to one per animation frame and
-       only applied once the decoder is ready (canplay), so a cold
-       video shows its poster instead of freezing on a stale frame.
+       applied even before the decoder is ready: the browser queues
+       them and serves them from the warm HTTP cache, so a cold video
+       keeps its poster instead of freezing on a stale frame.
      - Cache warming (warmVideoCache) downloads each clip into the
        HTTP cache at idle, turning every later seek into a local read. */
   function initScrubVideo(video, opts) {
@@ -61,7 +62,11 @@
       }
     }
 
-    /* coalesce seeks: at most one decode pass per frame, latest target wins */
+    /* coalesce seeks: at most one decode pass per frame, latest target wins.
+       Seeks are applied even before the decoder is ready: the browser
+       queues them and serves them from the warm HTTP cache the instant
+       data is available, so a cold video keeps its poster instead of
+       freezing on a stale frame. */
     function scheduleSeek(t) {
       pendingSeek = t;
       if (seekScheduled) return;
@@ -71,7 +76,6 @@
         if (pendingSeek === null) return;
         var t2 = pendingSeek;
         pendingSeek = null;
-        if (!ready) return; /* keep the poster until the decoder can render */
         applySeek(t2);
       });
     }
@@ -138,13 +142,11 @@
     viewports: 2.4,
     fallbackDuration: 6,
     contentEl: "liga-content",
-    preload: "metadata",
   });
 
   initScrubVideo(document.getElementById("video-mochila"), {
     viewports: 1.6,
     fallbackDuration: 5.5,
-    preload: "auto",
   });
 
   /* ---------------- Video cache warming ----------------
