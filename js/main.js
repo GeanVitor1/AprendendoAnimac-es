@@ -23,13 +23,23 @@
     });
   }
 
-  /* ---------------- Scroll-scrubbed video ---------------- */
+  /* ---------------- Scroll-scrubbed video ----------------
+     Performance notes for CDN hosting (Vercel):
+     - Every currentTime seek beyond the buffered range is an HTTP
+       round-trip. Seeks are coalesced to one per animation frame and
+       only applied once the decoder is ready (canplay), so a cold
+       video shows its poster instead of freezing on a stale frame.
+     - Cache warming (warmVideoCache) downloads each clip into the
+       HTTP cache at idle, turning every later seek into a local read. */
   function initScrubVideo(video, opts) {
     if (!video) return;
 
     var section = video.closest(".scene");
     var contentEl = opts.contentEl ? document.getElementById(opts.contentEl) : null;
-    var lastTime = -1;
+    var trigger = null;
+    var ready = false;
+    var pendingSeek = null;
+    var seekScheduled = false;
 
     video.muted = true;
     video.setAttribute("playsinline", "");
@@ -38,26 +48,55 @@
     /* ask the decoder to favor seek latency over throughput (Chrome/Edge 95+) */
     if ("decodingHint" in video) video.decodingHint = "low-latency";
 
-    function seek(t) {
+    function applySeek(t) {
       try {
         /* quantized to ~1 video frame (24fps): sub-frame seeks are
            invisible but each one forces a decode pass, which stutters
            the scroll right at the end of a pinned scene */
         if (Math.abs(video.currentTime - t) > 0.05) {
           video.currentTime = t;
-          lastTime = t;
         }
       } catch (e) {
         /* seeking before metadata is safe to ignore */
       }
     }
 
+    /* coalesce seeks: at most one decode pass per frame, latest target wins */
+    function scheduleSeek(t) {
+      pendingSeek = t;
+      if (seekScheduled) return;
+      seekScheduled = true;
+      requestAnimationFrame(function () {
+        seekScheduled = false;
+        if (pendingSeek === null) return;
+        var t2 = pendingSeek;
+        pendingSeek = null;
+        if (!ready) return; /* keep the poster until the decoder can render */
+        applySeek(t2);
+      });
+    }
+
+    function currentTarget() {
+      var d = video.duration || opts.fallbackDuration || 10;
+      var p = trigger && typeof trigger.progress === "number" ? trigger.progress : 0;
+      return p * Math.max(0, d - 0.15);
+    }
+
+    function markReady() {
+      if (ready) return;
+      ready = true;
+      /* snap to where the scroll already is */
+      scheduleSeek(currentTarget());
+    }
+    video.addEventListener("loadeddata", markReady, { once: true });
+    video.addEventListener("canplay", markReady, { once: true });
+
     if (reducedMotion) {
       /* static experience: show the final frame once metadata arrives */
       video.addEventListener(
         "loadedmetadata",
         function () {
-          seek(Math.max(0, (video.duration || opts.fallbackDuration || 10) - 0.12));
+          applySeek(Math.max(0, (video.duration || opts.fallbackDuration || 10) - 0.12));
         },
         { once: true }
       );
@@ -67,7 +106,7 @@
     /* pinned section where the video scrubs with scroll.
        duration resolves lazily inside onUpdate, so pinning never
        waits for async metadata. */
-    ScrollTrigger.create({
+    trigger = ScrollTrigger.create({
       trigger: section,
       start: "top top",
       end: function () {
@@ -80,7 +119,7 @@
       onUpdate: function (self) {
         var d = video.duration || opts.fallbackDuration || 10;
         var target = self.progress * Math.max(0, d - 0.15);
-        seek(target);
+        scheduleSeek(target);
         if (contentEl) {
           /* the headline yields to the video as the story plays */
           contentEl.style.opacity = Math.max(0, 1 - self.progress * 5);
@@ -107,6 +146,57 @@
     fallbackDuration: 5.5,
     preload: "auto",
   });
+
+  /* ---------------- Video cache warming ----------------
+     Scrubbing over the network stalls whenever a seek lands outside
+     the buffered range. Prefetching the clips into the HTTP cache at
+     idle makes every later seek a local read — no round-trip, no
+     freeze. Runs only when the page is idle and network is cheap
+     (skipped under Save-Data or reduced motion, aborted when hidden). */
+  (function warmVideoCache() {
+    if (reducedMotion) return;
+    if (navigator.connection && navigator.connection.saveData) return;
+    if (!("fetch" in window)) return;
+
+    var urls = [
+      document.getElementById("video-topo"),
+      document.getElementById("video-meio"),
+      document.getElementById("video-mochila"),
+    ]
+      .filter(Boolean)
+      .map(function (v) {
+        return v.currentSrc || v.getAttribute("src");
+      });
+    if (!urls.length) return;
+
+    var i = 0;
+    var start = function () {
+      if (i >= urls.length) return;
+      var url = urls[i++];
+      window
+        .fetch(url, { cache: "force-cache" })
+        .catch(function () {})
+        .then(start);
+    };
+    var idle = window.requestIdleCallback
+      ? function (fn) {
+          return window.requestIdleCallback(fn, { timeout: 4000 });
+        }
+      : function (fn) {
+          return setTimeout(fn, 2000);
+        };
+
+    window.addEventListener(
+      "load",
+      function () {
+        idle(start);
+      },
+      { once: true }
+    );
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) i = urls.length; /* stop the chain */
+    });
+  })();
 
   /* ---------------- Scroll reveals ---------------- */
   if (!reducedMotion) {
